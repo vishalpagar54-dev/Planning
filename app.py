@@ -66,7 +66,7 @@ if uploaded_file:
                 ]
 
                 st.write(
-                    f"{row['Material']} has lowest forecast accuracy"
+                    f"{row['Material','Forecast_Accuracy']} has lowest forecast accuracy"
                 )
 
             elif "highest sales" in q:
@@ -76,7 +76,7 @@ if uploaded_file:
                 ]
 
                 st.write(
-                    f"{row['Material']} has highest sales"
+                    f"{row['Material','Actual']} has highest sales"
                 )
 
             else:
