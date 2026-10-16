@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Planning Copilot", layout="wide")
+st.set_page_config(page_title="Vishal Planning Copilot", layout="wide")
 
-st.title("📊 Planning Copilot")
+st.title("📊 Vishal Planning Copilot")
 
 uploaded_file = st.file_uploader(
     "Upload Excel File",
