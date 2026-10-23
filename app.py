@@ -146,16 +146,11 @@ if uploaded_file:
             "Healthy"
         )
 
-        # -------------------------------------------------
-        # PRIORITY
-        # -------------------------------------------------
+      # Planner Priority
 
-        df["Planner_Priority"] = np.where(
-            (
-                df["Forecast_Accuracy"] < 70
-            )
-            |
-            (
-                df["Inventory_Coverage"] > 3
-            ),
-            "Review Required",
+df["Planner_Priority"] = np.where(
+    (df["Forecast_Accuracy"] < 70) |
+    (df["Inventory_Coverage"] > 3),
+    "Review Required",
+    "Healthy"
+)
