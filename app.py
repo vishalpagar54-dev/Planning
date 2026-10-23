@@ -1,31 +1,36 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from openai import OpenAI
 
-# =======================================================
-# PAGE CONFIG
-# =======================================================
+# ==========================================
+# CONFIG
+# ==========================================
 
 st.set_page_config(
-    page_title="Planner IQ ",
+    page_title="Planner IQ Copilot",
     layout="wide"
 )
 
-st.title("📊 Planner IQ ")
-st.caption("AI Powered Demand Planning & Forecast Analytics")
+st.title("📊 Planner IQ Copilot")
 
-# =======================================================
+# ==========================================
+# OPENAI KEY
+# ==========================================
+
+api_key = st.secrets.get("OPENAI_API_KEY", "")
+
+# For local testing:
+# api_key = "YOUR_API_KEY"
+
+# ==========================================
 # FILE UPLOAD
-# =======================================================
+# ==========================================
 
 uploaded_file = st.file_uploader(
     "Upload Excel File",
     type=["xlsx", "xls"]
 )
-
-# =======================================================
-# PROCESS FILE
-# =======================================================
 
 if uploaded_file:
 
@@ -39,29 +44,29 @@ if uploaded_file:
     ]
 
     missing = [
-        col for col in required_cols
-        if col not in df.columns
+        c for c in required_cols
+        if c not in df.columns
     ]
 
     if missing:
 
         st.error(
-            f"Missing columns: {missing}"
+            f"Missing Columns: {missing}"
         )
 
     else:
 
-        # =======================================================
+        # ======================================
         # KPI CALCULATIONS
-        # =======================================================
+        # ======================================
 
         df["Forecast_Error"] = (
             df["Forecast"] -
             df["Actual"]
         )
 
-        df["Absolute_Error"] = (
-            abs(df["Forecast_Error"])
+        df["Absolute_Error"] = abs(
+            df["Forecast_Error"]
         )
 
         df["MAPE_%"] = (
@@ -75,8 +80,9 @@ if uploaded_file:
         ).round(2)
 
         df["Forecast_Accuracy"] = (
-            100 - df["MAPE_%"]
-        ).clip(lower=0).round(2)
+            100 -
+            df["MAPE_%"]
+        ).clip(lower=0)
 
         df["Bias_%"] = (
             df["Forecast_Error"]
@@ -91,20 +97,17 @@ if uploaded_file:
             df["Actual"].replace(0, 1)
         ).round(2)
 
-        df["Forecast_Status"] = np.where(
-            df["Forecast"] > df["Actual"],
-            "Over Forecast",
-            "Under Forecast"
-        )
-
-        # =======================================================
+        # ======================================
         # ABC CLASSIFICATION
-        # =======================================================
+        # ======================================
 
-        abc_df = df.sort_values(
-            by="Actual",
-            ascending=False
-        ).copy()
+        abc_df = (
+            df.sort_values(
+                "Actual",
+                ascending=False
+            )
+            .copy()
+        )
 
         abc_df["Sales_%"] = (
             abc_df["Actual"]
@@ -122,10 +125,11 @@ if uploaded_file:
 
             if x <= 80:
                 return "A"
+
             elif x <= 95:
                 return "B"
-            else:
-                return "C"
+
+            return "C"
 
         abc_df["ABC_Class"] = (
             abc_df["Cum_%"]
@@ -136,23 +140,25 @@ if uploaded_file:
             abc_df[
                 ["Material", "ABC_Class"]
             ],
-            how="left",
-            on="Material"
+            on="Material",
+            how="left"
         )
 
-        # =======================================================
-        # INVENTORY STATUS
-        # =======================================================
+        # ======================================
+        # STATUS FLAGS
+        # ======================================
+
+        df["Forecast_Status"] = np.where(
+            df["Forecast"] > df["Actual"],
+            "Over Forecast",
+            "Under Forecast"
+        )
 
         df["Inventory_Status"] = np.where(
             df["Inventory_Coverage"] > 3,
             "Excess Inventory",
             "Healthy"
         )
-
-        # =======================================================
-        # PLANNER PRIORITY
-        # =======================================================
 
         df["Planner_Priority"] = np.where(
             (
@@ -166,16 +172,21 @@ if uploaded_file:
             "Healthy"
         )
 
-        # =======================================================
-        # OVERALL KPIs
-        # =======================================================
+        # ======================================
+        # OVERALL KPI
+        # ======================================
 
-        mape = round(
+        overall_accuracy = round(
+            df["Forecast_Accuracy"].mean(),
+            2
+        )
+
+        overall_mape = round(
             df["MAPE_%"].mean(),
             2
         )
 
-        wape = round(
+        overall_wape = round(
             (
                 df["Absolute_Error"].sum()
                 /
@@ -184,7 +195,7 @@ if uploaded_file:
             2
         )
 
-        bias = round(
+        overall_bias = round(
             (
                 df["Forecast_Error"].sum()
                 /
@@ -193,35 +204,30 @@ if uploaded_file:
             2
         )
 
-        forecast_accuracy = round(
-            df["Forecast_Accuracy"].mean(),
-            2
-        )
-
-        # =======================================================
+        # ======================================
         # DASHBOARD
-        # =======================================================
+        # ======================================
 
         c1, c2, c3, c4, c5 = st.columns(5)
 
         c1.metric(
             "Forecast Accuracy",
-            f"{forecast_accuracy}%"
+            f"{overall_accuracy}%"
         )
 
         c2.metric(
             "MAPE",
-            f"{mape}%"
+            f"{overall_mape}%"
         )
 
         c3.metric(
             "WAPE",
-            f"{wape}%"
+            f"{overall_wape}%"
         )
 
         c4.metric(
-            "Bias %",
-            f"{bias}%"
+            "Bias",
+            f"{overall_bias}%"
         )
 
         c5.metric(
@@ -229,138 +235,102 @@ if uploaded_file:
             len(df)
         )
 
-        # =======================================================
-        # DISPLAY DATA
-        # =======================================================
+        # ======================================
+        # DATA
+        # ======================================
 
         st.dataframe(
             df,
             use_container_width=True
         )
 
-        # =======================================================
-        # CHAT SECTION
-        # =======================================================
+        # ======================================
+        # CHAT
+        # ======================================
 
-        question = st.text_input(
-            "💬 Ask Planner IQ"
+        question = st.chat_input(
+            "Ask Planner IQ..."
         )
 
         if question:
 
-            q = question.lower().strip()
+            st.chat_message(
+                "user"
+            ).write(question)
 
-            # ===================================================
-            # MATERIAL SEARCH
-            # ===================================================
+            if not api_key:
 
-            material_match = df[
-                df["Material"]
-                .astype(str)
-                .str.lower()
-                == q
-            ]
-
-            if not material_match.empty:
-
-                row = material_match.iloc[0]
-
-                st.success(f"""
-Material : {row['Material']}
-
-Forecast : {row['Forecast']:,.0f}
-
-Actual : {row['Actual']:,.0f}
-
-Forecast Accuracy : {row['Forecast_Accuracy']}%
-
-MAPE : {row['MAPE_%']}%
-
-Forecast Error : {row['Forecast_Error']:,.0f}
-
-Bias : {row['Bias_%']}%
-
-ABC Class : {row['ABC_Class']}
-
-Inventory : {row['Inventory']:,.0f}
-
-Inventory Coverage : {row['Inventory_Coverage']}
-
-Forecast Status : {row['Forecast_Status']}
-
-Priority : {row['Planner_Priority']}
-""")
-
-            # ===================================================
-            # OVERVIEW
-            # ===================================================
-
-            elif any(x in q for x in [
-                "summary",
-                "overview",
-                "performance",
-                "forecast performance",
-                "business summary"
-            ]):
-
-                st.markdown(f"""
-### 📌 Executive Summary
-
-✅ Forecast Accuracy = **{forecast_accuracy}%**
-
-✅ MAPE = **{mape}%**
-
-✅ WAPE = **{wape}%**
-
-✅ Forecast Bias = **{bias}%**
-
-✅ Total Forecast = **{df['Forecast'].sum():,.0f}**
-
-✅ Total Sales = **{df['Actual'].sum():,.0f}**
-
-✅ Total Materials = **{len(df)}**
-""")
-
-            # ===================================================
-            # HIGHEST SALES
-            # ===================================================
-
-            elif "highest sales" in q:
-
-                row = df.loc[
-                    df["Actual"].idxmax()
-                ]
-
-                st.success(
-                    f"{row['Material']} has highest sales ({row['Actual']:,.0f})"
+                st.error(
+                    "OpenAI API Key not configured."
                 )
 
-            # ===================================================
-            # LOWEST SALES
-            # ===================================================
+            else:
 
-            elif "lowest sales" in q:
-
-                row = df.loc[
-                    df["Actual"].idxmin()
-                ]
-
-                st.success(
-                    f"{row['Material']} has lowest sales ({row['Actual']:,.0f})"
+                client = OpenAI(
+                    api_key=api_key
                 )
 
-            # ===================================================
-            # BEST FORECAST ACCURACY
-            # ===================================================
+                dataset_summary = f"""
+Forecast Accuracy: {overall_accuracy}%
 
-            elif "best forecast" in q:
+MAPE: {overall_mape}%
 
-                row = df.loc[
-                    df["Forecast_Accuracy"].idxmax()
-                ]
+WAPE: {overall_wape}%
 
-                st.success(
-                    f"{row['Material']} has best forecast accuracy ({row['Forecast_Accuracy']}%)"
+Bias: {overall_bias}%
+
+Materials: {len(df)}
+"""
+
+                data_context = (
+                    df.head(200)
+                    .to_string(index=False)
                 )
 
- 
+                prompt = f"""
+You are Planner IQ.
+
+You are a Demand Planning,
+Forecasting,
+Inventory,
+S&OP,
+and Supply Chain Copilot.
+
+Business KPI:
+
+{dataset_summary}
+
+Dataset:
+
+{data_context}
+
+Question:
+
+{question}
+
+Answer using supply chain terminology.
+
+Provide recommendations where possible.
+"""
+
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": prompt
+                        }
+                    ],
+                    temperature=0.2
+                )
+
+                answer = (
+                    response
+                    .choices[0]
+                    .message
+                    .content
+                )
+
+                st.chat_message(
+                    "assistant"
+                ).write(answer)
