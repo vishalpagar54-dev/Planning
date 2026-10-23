@@ -7,11 +7,11 @@ import numpy as np
 # =======================================================
 
 st.set_page_config(
-    page_title="Planner IQ Copilot",
+    page_title="Planner IQ ",
     layout="wide"
 )
 
-st.title("📊 Planner IQ Copilot")
+st.title("📊 Planner IQ ")
 st.caption("AI Powered Demand Planning & Forecast Analytics")
 
 # =======================================================
