@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# ==================================================
+# =======================================================
 # PAGE CONFIG
-# ==================================================
+# =======================================================
 
 st.set_page_config(
     page_title="Planner IQ Copilot",
@@ -12,20 +12,20 @@ st.set_page_config(
 )
 
 st.title("📊 Planner IQ Copilot")
-st.write("Ask planning questions like ChatGPT")
+st.caption("AI Powered Demand Planning & Forecast Analytics")
 
-# ==================================================
+# =======================================================
 # FILE UPLOAD
-# ==================================================
+# =======================================================
 
 uploaded_file = st.file_uploader(
     "Upload Excel File",
     type=["xlsx", "xls"]
 )
 
-# ==================================================
+# =======================================================
 # PROCESS FILE
-# ==================================================
+# =======================================================
 
 if uploaded_file:
 
@@ -39,8 +39,8 @@ if uploaded_file:
     ]
 
     missing = [
-        c for c in required_cols
-        if c not in df.columns
+        col for col in required_cols
+        if col not in df.columns
     ]
 
     if missing:
@@ -51,29 +51,31 @@ if uploaded_file:
 
     else:
 
-        # ==========================================
+        # =======================================================
         # KPI CALCULATIONS
-        # ==========================================
+        # =======================================================
 
         df["Forecast_Error"] = (
-            df["Forecast"] - df["Actual"]
+            df["Forecast"] -
+            df["Actual"]
         )
 
         df["Absolute_Error"] = (
             abs(df["Forecast_Error"])
         )
 
-        df["Forecast_Accuracy"] = (
-            100 -
-            (
-                abs(
-                    df["Forecast"] -
-                    df["Actual"]
-                )
-                /
-                df["Actual"].replace(0, 1)
-                * 100
+        df["MAPE_%"] = (
+            abs(
+                df["Forecast"] -
+                df["Actual"]
             )
+            /
+            df["Actual"].replace(0, 1)
+            * 100
+        ).round(2)
+
+        df["Forecast_Accuracy"] = (
+            100 - df["MAPE_%"]
         ).clip(lower=0).round(2)
 
         df["Bias_%"] = (
@@ -89,9 +91,15 @@ if uploaded_file:
             df["Actual"].replace(0, 1)
         ).round(2)
 
-        # ==========================================
+        df["Forecast_Status"] = np.where(
+            df["Forecast"] > df["Actual"],
+            "Over Forecast",
+            "Under Forecast"
+        )
+
+        # =======================================================
         # ABC CLASSIFICATION
-        # ==========================================
+        # =======================================================
 
         abc_df = df.sort_values(
             by="Actual",
@@ -114,11 +122,10 @@ if uploaded_file:
 
             if x <= 80:
                 return "A"
-
             elif x <= 95:
                 return "B"
-
-            return "C"
+            else:
+                return "C"
 
         abc_df["ABC_Class"] = (
             abc_df["Cum_%"]
@@ -129,61 +136,92 @@ if uploaded_file:
             abc_df[
                 ["Material", "ABC_Class"]
             ],
-            on="Material",
-            how="left"
+            how="left",
+            on="Material"
         )
 
-        # ==========================================
-        # OVERALL KPI
-        # ==========================================
+        # =======================================================
+        # INVENTORY STATUS
+        # =======================================================
 
-        mape = (
+        df["Inventory_Status"] = np.where(
+            df["Inventory_Coverage"] > 3,
+            "Excess Inventory",
+            "Healthy"
+        )
+
+        # =======================================================
+        # PLANNER PRIORITY
+        # =======================================================
+
+        df["Planner_Priority"] = np.where(
             (
-                df["Absolute_Error"]
+                df["Forecast_Accuracy"] < 70
+            )
+            |
+            (
+                df["Inventory_Coverage"] > 3
+            ),
+            "Review Required",
+            "Healthy"
+        )
+
+        # =======================================================
+        # OVERALL KPIs
+        # =======================================================
+
+        mape = round(
+            df["MAPE_%"].mean(),
+            2
+        )
+
+        wape = round(
+            (
+                df["Absolute_Error"].sum()
                 /
-                df["Actual"].replace(0, 1)
-            ).mean()
-            * 100
+                df["Actual"].sum()
+            ) * 100,
+            2
         )
 
-        wape = (
-            df["Absolute_Error"].sum()
-            /
-            df["Actual"].sum()
-            * 100
+        bias = round(
+            (
+                df["Forecast_Error"].sum()
+                /
+                df["Actual"].sum()
+            ) * 100,
+            2
         )
 
-        bias = (
-            df["Forecast_Error"].sum()
-            /
-            df["Actual"].sum()
-            * 100
+        forecast_accuracy = round(
+            df["Forecast_Accuracy"].mean(),
+            2
         )
 
-        # ==========================================
+        # =======================================================
         # DASHBOARD
-        # ==========================================
+        # =======================================================
 
         c1, c2, c3, c4, c5 = st.columns(5)
 
         c1.metric(
             "Forecast Accuracy",
-            f"{df['Forecast_Accuracy'].mean():.1f}%"
+            f"{forecast_accuracy}%"
         )
 
         c2.metric(
             "MAPE",
-            f"{mape:.1f}%"
+            f"{mape}%"
         )
 
         c3.metric(
             "WAPE",
-            f"{wape:.1f}%"
+            f"{wape}%"
         )
 
         c4.metric(
             "Bias %",
-            f"{bias:.1f}%"
+            f"{bias}%"
         )
 
         c5.metric(
@@ -191,18 +229,18 @@ if uploaded_file:
             len(df)
         )
 
-        # ==========================================
-        # DATAFRAME
-        # ==========================================
+        # =======================================================
+        # DISPLAY DATA
+        # =======================================================
 
         st.dataframe(
             df,
             use_container_width=True
         )
 
-        # ==========================================
-        # CHAT BOX
-        # ==========================================
+        # =======================================================
+        # CHAT SECTION
+        # =======================================================
 
         question = st.text_input(
             "💬 Ask Planner IQ"
@@ -212,9 +250,9 @@ if uploaded_file:
 
             q = question.lower().strip()
 
-            # ======================================
+            # ===================================================
             # MATERIAL SEARCH
-            # ======================================
+            # ===================================================
 
             material_match = df[
                 df["Material"]
@@ -227,73 +265,65 @@ if uploaded_file:
 
                 row = material_match.iloc[0]
 
-                st.success(
-                    f"""
-Material: {row['Material']}
+                st.success(f"""
+Material : {row['Material']}
 
-Forecast: {row['Forecast']}
+Forecast : {row['Forecast']:,.0f}
 
-Actual: {row['Actual']}
+Actual : {row['Actual']:,.0f}
 
-Forecast Accuracy: {row['Forecast_Accuracy']}%
+Forecast Accuracy : {row['Forecast_Accuracy']}%
 
-Forecast Error: {row['Forecast_Error']}
+MAPE : {row['MAPE_%']}%
 
-Bias: {row['Bias_%']}%
+Forecast Error : {row['Forecast_Error']:,.0f}
 
-Inventory: {row['Inventory']}
+Bias : {row['Bias_%']}%
 
-Inventory Coverage: {row['Inventory_Coverage']}
+ABC Class : {row['ABC_Class']}
 
-ABC Class: {row['ABC_Class']}
-"""
-                )
+Inventory : {row['Inventory']:,.0f}
 
-            # ======================================
-            # OVERALL PERFORMANCE
-            # ======================================
+Inventory Coverage : {row['Inventory_Coverage']}
 
-            elif any(
-                x in q for x in [
-                    "summary",
-                    "overview",
-                    "performance",
-                    "forecast performance",
-                    "business summary"
-                ]
-            ):
+Forecast Status : {row['Forecast_Status']}
 
-                st.subheader(
-                    "Business Summary"
-                )
+Priority : {row['Planner_Priority']}
+""")
 
-                st.write(
-                    f"Total Materials : {len(df)}"
-                )
+            # ===================================================
+            # OVERVIEW
+            # ===================================================
 
-                st.write(
-                    f"Total Forecast : {df['Forecast'].sum():,.0f}"
-                )
+            elif any(x in q for x in [
+                "summary",
+                "overview",
+                "performance",
+                "forecast performance",
+                "business summary"
+            ]):
 
-                st.write(
-                    f"Total Actual Sales : {df['Actual'].sum():,.0f}"
-                )
+                st.markdown(f"""
+### 📌 Executive Summary
 
-                st.write(
-                    f"Average Forecast Accuracy : {df['Forecast_Accuracy'].mean():.2f}%"
-                )
+✅ Forecast Accuracy = **{forecast_accuracy}%**
 
-                st.write(
-                    f"MAPE : {mape:.2f}%"
-                )
+✅ MAPE = **{mape}%**
 
-                st.write(
-                    f"WAPE : {wape:.2f}%"
-                )
+✅ WAPE = **{wape}%**
 
-            # ======================================
-            # SALES
-            # ======================================
+✅ Forecast Bias = **{bias}%**
+
+✅ Total Forecast = **{df['Forecast'].sum():,.0f}**
+
+✅ Total Sales = **{df['Actual'].sum():,.0f}**
+
+✅ Total Materials = **{len(df)}**
+""")
+
+            # ===================================================
+            # HIGHEST SALES
+            # ===================================================
 
             elif "highest sales" in q:
 
@@ -301,9 +331,13 @@ ABC Class: {row['ABC_Class']}
                     df["Actual"].idxmax()
                 ]
 
-                st.write(
-                    f"✅ {row['Material']} has highest sales ({row['Actual']:,.0f})"
+                st.success(
+                    f"{row['Material']} has highest sales ({row['Actual']:,.0f})"
                 )
+
+            # ===================================================
+            # LOWEST SALES
+            # ===================================================
 
             elif "lowest sales" in q:
 
@@ -311,28 +345,13 @@ ABC Class: {row['ABC_Class']}
                     df["Actual"].idxmin()
                 ]
 
-                st.write(
-                    f"✅ {row['Material']} has lowest sales ({row['Actual']:,.0f})"
+                st.success(
+                    f"{row['Material']} has lowest sales ({row['Actual']:,.0f})"
                 )
 
-            elif "top sales" in q:
-
-                st.dataframe(
-                    df.nlargest(
-                        10,
-                        "Actual"
-                    )[
-                        [
-                            "Material",
-                            "Actual",
-                            "Forecast_Accuracy"
-                        ]
-                    ]
-                )
-
-            # ======================================
-            # FORECAST ACCURACY
-            # ======================================
+            # ===================================================
+            # BEST FORECAST ACCURACY
+            # ===================================================
 
             elif "best forecast" in q:
 
@@ -340,227 +359,8 @@ ABC Class: {row['ABC_Class']}
                     df["Forecast_Accuracy"].idxmax()
                 ]
 
-                st.write(
-                    f"{row['Material']} has best forecast accuracy {row['Forecast_Accuracy']}%"
+                st.success(
+                    f"{row['Material']} has best forecast accuracy ({row['Forecast_Accuracy']}%)"
                 )
 
-            elif "lowest forecast" in q:
-
-                row = df.loc[
-                    df["Forecast_Accuracy"].idxmin()
-                ]
-
-                st.write(
-                    f"{row['Material']} has lowest forecast accuracy {row['Forecast_Accuracy']}%"
-                )
-
-            elif "poor accuracy" in q:
-
-                st.dataframe(
-                    df[
-                        df["Forecast_Accuracy"] < 70
-                    ]
-                )
-
-            # ======================================
-            # INVENTORY
-            # ======================================
-
-            elif "high inventory" in q:
-
-                st.dataframe(
-                    df.nlargest(
-                        10,
-                        "Inventory"
-                    )[
-                        ["Material", "Inventory"]
-                    ]
-                )
-
-            elif "inventory coverage" in q:
-
-                st.dataframe(
-                    df[
-                        [
-                            "Material",
-                            "Inventory",
-                            "Inventory_Coverage"
-                        ]
-                    ]
-                )
-
-            elif "excess stock" in q:
-
-                excess = df[
-                    df["Inventory"]
-                    >
-                    (
-                        df["Forecast"] * 2
-                    )
-                ]
-
-                st.dataframe(excess)
-
-            # ======================================
-            # ABC CLASS
-            # ======================================
-
-            elif "a class" in q:
-
-                st.dataframe(
-                    df[
-                        df["ABC_Class"] == "A"
-                    ]
-                )
-
-            elif "b class" in q:
-
-                st.dataframe(
-                    df[
-                        df["ABC_Class"] == "B"
-                    ]
-                )
-
-            elif "c class" in q:
-
-                st.dataframe(
-                    df[
-                        df["ABC_Class"] == "C"
-                    ]
-                )
-
-            # ======================================
-            # FORECAST BIAS
-            # ======================================
-
-            elif "over forecast" in q:
-
-                st.dataframe(
-                    df[
-                        df["Forecast"]
-                        >
-                        df["Actual"]
-                    ]
-                )
-
-            elif "under forecast" in q:
-
-                st.dataframe(
-                    df[
-                        df["Forecast"]
-                        <
-                        df["Actual"]
-                    ]
-                )
-
-            # ======================================
-            # RISK MATERIALS
-            # ======================================
-
-            elif "risk" in q or "attention" in q:
-
-                risk = df[
-                    (
-                        df["Forecast_Accuracy"] < 70
-                    )
-                    |
-                    (
-                        df["Inventory_Coverage"] > 3
-                    )
-                ]
-
-                st.dataframe(risk)
-
-            # ======================================
-            # SOP SUMMARY
-            # ======================================
-
-            elif "sop" in q or "management" in q:
-
-                poor = len(
-                    df[
-                        df["Forecast_Accuracy"]
-                        < 70
-                    ]
-                )
-
-                excessive = len(
-                    df[
-                        df["Inventory_Coverage"]
-                        > 3
-                    ]
-                )
-
-                st.markdown(
-                    f"""
-### Executive Summary
-
-✅ Average Forecast Accuracy: **{df['Forecast_Accuracy'].mean():.1f}%**
-
-✅ WAPE: **{wape:.1f}%**
-
-⚠ Poor Accuracy Materials: **{poor}**
-
-⚠ Excess Inventory Materials: **{excessive}**
-
-📌 Focus on A-Class materials with low forecast accuracy.
-
-📌 Review inventory coverage above 3 months.
-"""
-                )
-
-            # ======================================
-            # HELP
-            # ======================================
-
-            else:
-
-                st.info(
-                    """
-Try asking:
-
-• Summary
-
-• Overall Forecast Performance
-
-• Business Overview
-
-• Highest Sales
-
-• Lowest Sales
-
-• Top Sales
-
-• Best Forecast Accuracy
-
-• Lowest Forecast Accuracy
-
-• Poor Accuracy Materials
-
-• High Inventory
-
-• Inventory Coverage
-
-• Excess Stock
-
-• A Class Materials
-
-• B Class Materials
-
-• C Class Materials
-
-• Over Forecast
-
-• Under Forecast
-
-• Risk Materials
-
-• Materials Needing Attention
-
-• Management Summary
-
-• S&OP Summary
-
-• Material Number (Example: 60270074)
-"""
-                )
+ 
