@@ -355,7 +355,7 @@ Inventory and S&OP Copilot.
                     "OpenAI API Key not configured."
                 )
 
-                st.markdown(f"""
+                st.markdown("""
 ### Quick Summary
 
 ✅ Forecast Accuracy: **{forecast_accuracy}%**
